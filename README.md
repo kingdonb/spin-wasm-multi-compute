@@ -1,6 +1,6 @@
 ## Overview
 
-This is a science project that aims to demonstrate how WebAssembly code can be run on different type of infrastructure compute primitives (namely instances, containers and functions). This experiment specifically leverages [Spin](https://github.com/fermyon/spin), "...a framework for building, deploying, and running fast, secure, and composable cloud microservices with WebAssembly." Note Spin is an open source project made available under the Apache-2.0 license. 
+This is a science project that aims to demonstrate how WebAssembly code can be run on different type of infrastructure compute primitives (namely instances, containers and functions). This experiment specifically leverages [Spin](https://github.com/spinframework/spin), "...a framework for building, deploying, and running fast, secure, and composable cloud microservices with WebAssembly." Note Spin is an open source project made available under the Apache-2.0 license. 
 
 The inspiration for this PoC generated from [this GitHub discussion](https://github.com/fermyon/installer/issues/70). We are not going to debate here what the merits (or drawbacks) of running WebAssembly code and Spin specifically in each of the primitives considered. The goal was to demonstrate that it can be done (more or less elegantly). 
 
@@ -59,42 +59,61 @@ git clone https://gitlab.aws.dev/mreferre/spin-wasm-multi-compute
 cd spin-wasm-multi-compute
 ```
 
-### Create Python virtual environment and install the dependencies
-```bash
-python3.7 -m venv .venv
-source .venv/bin/activate
+### Install dependencies with uv
 
-# [Optional] Needed to upgrade dependencies and cleanup unused packages
-# Pinning pip-tools to 6.4.0 and pip to 21.3.1 due to
-# https://github.com/jazzband/pip-tools/issues/1576
-pip install pip-tools==6.4.0
-pip install pip==21.3.1
-
-./scripts/install-deps.sh
-./scripts/run-tests.sh
-```
-
-### [Optional] Upgrade AWS CDK Toolkit (CLI) version
-```bash
-vi package.json  # Update the "aws-cdk" package version
-./scripts/install-deps.sh
-./scripts/run-tests.sh
-```
-
-### [Optional] Upgrade dependencies (ordered by constraints)
-Consider [AWS CDK Toolkit (CLI)](https://docs.aws.amazon.com/cdk/latest/guide/reference.html#versioning) compatibility
-when upgrading AWS CDK packages version.
+This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable Python dependency management.
 
 ```bash
-pip-compile --upgrade requirements.in
-pip-compile --upgrade requirements-dev.in
-./scripts/install-deps.sh
-# [Optional] Cleanup unused packages
-pip-sync requirements.txt requirements-dev.txt
-./scripts/run-tests.sh
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Python dependencies (creates .venv automatically)
+uv sync
+
+# Install Node.js dependencies (for CDK CLI and cdk8s)
+npm install
+
+# Run tests
+uv run ./scripts/run-tests.sh
 ```
 
-### Deploy the component to sandbox environment
+### [Optional] Upgrade dependencies
+```bash
+# Update pyproject.toml version constraints, then:
+uv sync --upgrade
+
+# For CDK CLI, update package.json then:
+npm update
+```
+
+### Deploy locally with Kubernetes (no AWS required)
+
+Use cdk8s to deploy Spin workloads to a local Kubernetes cluster (kind, k3d, minikube, Docker Desktop) without any AWS costs:
+
+```bash
+# Generate Kubernetes manifests
+cd k8s
+JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 uv run python app.py
+cd ..
+
+# Build the container image
+docker build -t spin-wasm-demo:latest backend/compute/runtime/
+
+# Load into kind (if using kind)
+kind load docker-image spin-wasm-demo:latest
+
+# Deploy to your local cluster
+kubectl apply -f k8s/dist/
+
+# Port-forward to test
+kubectl port-forward svc/spin-wasm-service 8080:80
+curl http://localhost:8080/
+```
+
+For Flux GitOps, commit the `k8s/dist/` directory to your repo and Flux will pick up changes automatically.
+
+### Deploy to AWS sandbox environment
+
 The `WebAssemblyDemoBackendSandbox` stack uses your default AWS account and region.
 
 ```bash
@@ -138,3 +157,49 @@ npx cdk destroy WebAssemblyDemoBackendSandbox
 This repo is distributed under the MIT-0 license, and it's based on [this template](https://github.com/aws-samples/aws-cdk-project-structure-python).
 
 Also, tons of credit to [Alex Pulver](https://github.com/alexpulver) who helped me out with all the CDK Python intricacies.
+
+## Version Information
+
+This project uses pinned versions for reproducibility:
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| Spin | 3.5.1 | [spinframework/spin](https://github.com/spinframework/spin) |
+| AWS CDK (Python) | 2.235.0 | aws-cdk-lib |
+| AWS CDK CLI | 2.1101.0 | npm aws-cdk |
+| cdk8s | 2.70.43 | Local Kubernetes support |
+| Lambda Web Adapter | 0.9.1 | ECR public image |
+| Python | ≥3.11 | pyproject.toml requirement |
+| WASM Target | wasm32-wasip1 | Modern WASI interface |
+
+### Architecture Support
+
+The current configuration targets **amd64 (x86_64)**. The Dockerfile and infrastructure support **arm64** for future deployment to:
+- AWS Graviton (EC2, Lambda, Fargate)
+- Raspberry Pi clusters
+- ARM-based edge devices
+
+To switch architectures, update the `TARGETARCH` build arg in the Dockerfile:
+```bash
+docker build --build-arg TARGETARCH=arm64 -t spin-wasm-demo:arm64 backend/compute/runtime/
+```
+
+### Upgrade Path
+
+1. Check for new versions:
+   - [Spin releases](https://github.com/spinframework/spin/releases)
+   - [AWS CDK releases](https://github.com/aws/aws-cdk/releases)
+   - [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter/releases)
+
+2. Update version pins in:
+   - `pyproject.toml` (Python dependencies)
+   - `package.json` (CDK CLI)
+   - `backend/compute/runtime/Dockerfile` (Spin, Lambda adapter)
+   - `backend/compute/infrastructure.py` (EC2 Spin installation)
+
+3. Sync and test:
+   ```bash
+   uv sync --upgrade
+   npm update
+   uv run ./scripts/run-tests.sh
+   ```
