@@ -160,22 +160,27 @@ class Server(Construct):
         )
 
     def _install_spin(self) -> None:
+        # Spin version - update as needed (see https://github.com/spinframework/spin/releases)
+        # Architecture: amd64 (x86_64). For arm64/Graviton: use spin-v3.5.1-linux-aarch64.tar.gz
+        spin_version = "3.5.1"
         self.ec2_instance.user_data.add_commands(
             # pylint: disable=line-too-long
-            "curl -L -O https://github.com/fermyon/spin/releases/download/v0.6.0/spin-v0.6.0-linux-amd64.tar.gz",
-            "tar -zxvf spin-v0.6.0-linux-amd64.tar.gz",
+            f"curl -L -O https://github.com/spinframework/spin/releases/download/v{spin_version}/spin-v{spin_version}-linux-amd64.tar.gz",
+            f"tar -zxvf spin-v{spin_version}-linux-amd64.tar.gz",
             "mv spin /usr/local/bin/spin",
+            f"rm spin-v{spin_version}-linux-amd64.tar.gz",
         )
 
     def _seed_data_to_efs(self, efs_mount_path: str) -> None:
         self.ec2_instance.user_data.add_commands(
             f"cd {efs_mount_path}",
             "echo Creating and building a small application...",
-            "spin templates install --git https://github.com/fermyon/spin",
+            "spin templates install --git https://github.com/spinframework/spin",
             # pylint: disable=line-too-long
             "[[ -d spin-hello-world ]] || spin new http-rust spin-hello-world --value project-description='Rust http service' --value http-base=/ --value http-path=/",
             # pylint: disable=line-too-long
-            "/root/.cargo/bin/cargo build --manifest-path ./spin-hello-world/Cargo.toml --target wasm32-wasi --release",
+            # Note: wasm32-wasip1 is the modern target (wasm32-wasi is deprecated)
+            "/root/.cargo/bin/cargo build --manifest-path ./spin-hello-world/Cargo.toml --target wasm32-wasip1 --release",
             "cd -",
         )
 
