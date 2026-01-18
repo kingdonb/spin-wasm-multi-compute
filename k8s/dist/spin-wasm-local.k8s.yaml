@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: spin-wasm
+    component: backend
+  name: spin-wasm-local-spindeployment-c8b7b7fd
+spec:
+  minReadySeconds: 0
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      cdk8s.io/metadata.addr: spin-wasm-local-SpinDeployment-c8b81470
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: spin-wasm
+        cdk8s.io/metadata.addr: spin-wasm-local-SpinDeployment-c8b81470
+        component: backend
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - image: spin-wasm-demo:latest
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 3000
+              scheme: HTTP
+          name: spin
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 3000
+              scheme: HTTP
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          startupProbe:
+            failureThreshold: 3
+            tcpSocket:
+              port: 3000
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /home/spin/.cache
+              name: spin-cache
+            - mountPath: /app/.spin
+              name: spin-dir
+      dnsPolicy: ClusterFirst
+      hostNetwork: false
+      restartPolicy: Always
+      securityContext:
+        fsGroupChangePolicy: Always
+        runAsNonRoot: true
+      setHostnameAsFQDN: false
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - emptyDir:
+            medium: ""
+          name: tmp
+        - emptyDir:
+            medium: ""
+          name: spin-cache
+        - emptyDir:
+            medium: ""
+          name: spin-dir
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spin-wasm-service
+spec:
+  externalIPs: []
+  ports:
+    - port: 80
+      targetPort: 3000
+  selector:
+    cdk8s.io/metadata.addr: spin-wasm-local-SpinDeployment-c8b81470
+  type: ClusterIP

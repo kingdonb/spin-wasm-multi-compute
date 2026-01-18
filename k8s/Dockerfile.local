@@ -1,0 +1,34 @@
+# Spin WASM Local Development Container
+# This image includes a sample Spin app for local K8s testing
+FROM ubuntu:24.04
+
+ARG SPIN_VERSION=3.5.1
+ARG TARGETARCH=aarch64
+
+RUN apt-get update && apt install curl -y && apt-get clean && apt-get autoclean && apt-get autoremove
+
+SHELL ["/bin/bash", "-c"]
+
+# Install Spin
+RUN curl -L -O https://github.com/spinframework/spin/releases/download/v${SPIN_VERSION}/spin-v${SPIN_VERSION}-linux-${TARGETARCH}.tar.gz \
+    && tar -zxvf spin-v${SPIN_VERSION}-linux-${TARGETARCH}.tar.gz \
+    && mv spin /usr/local/bin/spin \
+    && rm spin-v${SPIN_VERSION}-linux-${TARGETARCH}.tar.gz
+
+# Create non-root user
+RUN groupadd -r spin && useradd -r -g spin -u 65532 spin \
+    && mkdir -p /app /tmp && chown -R spin:spin /app /tmp
+
+ENV PORT=3000
+
+EXPOSE ${PORT}
+
+USER spin
+WORKDIR /app
+
+# Create a simple static file server Spin app
+# spin.toml with fileserver component serving static files
+COPY --chown=spin:spin spin.toml /app/spin.toml
+COPY --chown=spin:spin static/ /app/static/
+
+CMD ["spin", "up", "--listen", "0.0.0.0:3000", "--log-dir", "/tmp", "--disable-cache"]

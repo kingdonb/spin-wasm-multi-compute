@@ -1,0 +1,5 @@
+{
+  "app": "python app.py",
+  "language": "python",
+  "imports": ["k8s"]
+}
