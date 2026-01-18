@@ -39,7 +39,8 @@ mypy --config-file .mypy.ini "${targets[@]}"
 pylint --rcfile .pylintrc "${targets[@]}"
 
 # Check dependencies for security issues (https://pyup.io/safety)
-safety check -r requirements.txt -r requirements-dev.txt
+# Note: uv export generates a requirements.txt-compatible format from pyproject.toml
+uv export --no-hashes | safety check --stdin
 
 # Report code complexity (https://radon.readthedocs.io)
 radon mi "${targets[@]}"
